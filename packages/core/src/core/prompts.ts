@@ -4,6 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * ============================================================================
+ * 系统提示词管理模块 (System Prompt Management Module)
+ * ============================================================================
+ *
+ * 本文件负责生成和管理 AI Agent 的系统提示词，包括：
+ * 1. 环境变量路径解析（resolvePathFromEnv）
+ * 2. 核心系统提示词生成（getCoreSystemPrompt）
+ * 3. 对话历史压缩提示词生成（getCompressionPrompt）
+ *
+ * 系统提示词定义了 AI Agent 的行为规范、工作流程和交互方式。
+ *
+ * @module prompts
+ */
+
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -21,49 +36,81 @@ import { MemoryTool, GEMINI_CONFIG_DIR } from '../tools/memoryTool.js';
 import { CodebaseInvestigatorAgent } from '../agents/codebase-investigator.js';
 import type { Config } from '../config/config.js';
 
+/**
+ * 解析环境变量为路径或布尔开关
+ *
+ * 此函数用于处理环境变量，支持三种模式：
+ * 1. 空值/未设置：返回 null
+ * 2. 布尔值（'0', 'false', '1', 'true'）：识别为开关
+ * 3. 路径字符串：解析为绝对路径（支持 ~ 展开）
+ *
+ * @param envVar - 环境变量的值（可选）
+ * @returns 解析结果对象
+ * @returns {boolean} isSwitch - 是否为布尔开关
+ * @returns {string|null} value - 解析后的值（路径字符串或布尔值字符串）
+ * @returns {boolean} isDisabled - 开关是否为禁用状态（仅当 isSwitch 为 true 时有意义）
+ *
+ * @example
+ * // 布尔开关
+ * resolvePathFromEnv('true')  // { isSwitch: true, value: 'true', isDisabled: false }
+ * resolvePathFromEnv('false') // { isSwitch: true, value: 'false', isDisabled: true }
+ *
+ * @example
+ * // 路径解析
+ * resolvePathFromEnv('~/config/system.md')  // { isSwitch: false, value: '/home/user/config/system.md', isDisabled: false }
+ * resolvePathFromEnv('./custom.md')         // { isSwitch: false, value: '/full/path/to/custom.md', isDisabled: false }
+ */
 export function resolvePathFromEnv(envVar?: string): {
   isSwitch: boolean;
   value: string | null;
   isDisabled: boolean;
 } {
-  // Handle the case where the environment variable is not set, empty, or just whitespace.
+  // ========== 步骤 1：处理空值情况 ==========
+  // 如果环境变量未设置、为空或只包含空白字符，返回默认值
   const trimmedEnvVar = envVar?.trim();
   if (!trimmedEnvVar) {
     return { isSwitch: false, value: null, isDisabled: false };
   }
 
+  // ========== 步骤 2：检查是否为布尔开关 ==========
   const lowerEnvVar = trimmedEnvVar.toLowerCase();
-  // Check if the input is a common boolean-like string.
+  // 检查输入是否为常见的布尔值字符串（'0', 'false', '1', 'true'）
   if (['0', 'false', '1', 'true'].includes(lowerEnvVar)) {
-    // If so, identify it as a "switch" and return its value.
+    // 识别为"开关"并返回其值
+    // '0' 和 'false' 被认为是"禁用"状态
     const isDisabled = ['0', 'false'].includes(lowerEnvVar);
     return { isSwitch: true, value: lowerEnvVar, isDisabled };
   }
 
-  // If it's not a switch, treat it as a potential file path.
+  // ========== 步骤 3：作为文件路径处理 ==========
+  // 如果不是开关，则将其视为潜在的文件路径
   let customPath = trimmedEnvVar;
 
-  // Safely expand the tilde (~) character to the user's home directory.
+  // ========== 步骤 4：安全地展开波浪号（~）到用户主目录 ==========
   if (customPath.startsWith('~/') || customPath === '~') {
     try {
-      const home = os.homedir(); // This is the call that can throw an error.
+      const home = os.homedir(); // 获取用户主目录（可能抛出错误）
       if (customPath === '~') {
+        // 如果只是 '~'，直接使用主目录
         customPath = home;
       } else {
+        // 如果是 '~/something'，拼接路径
         customPath = path.join(home, customPath.slice(2));
       }
     } catch (error) {
-      // If os.homedir() fails, we catch the error instead of crashing.
+      // 如果 os.homedir() 失败，捕获错误而不是崩溃
+      // 这可能发生在某些受限环境中
       console.warn(
         `Could not resolve home directory for path: ${trimmedEnvVar}`,
         error,
       );
-      // Return null to indicate the path resolution failed.
+      // 返回 null 表示路径解析失败
       return { isSwitch: false, value: null, isDisabled: false };
     }
   }
 
-  // Return it as a non-switch with the fully resolved absolute path.
+  // ========== 步骤 5：返回完全解析的绝对路径 ==========
+  // 使用 path.resolve 将相对路径转换为绝对路径
   return {
     isSwitch: false,
     value: path.resolve(customPath),
@@ -71,39 +118,84 @@ export function resolvePathFromEnv(envVar?: string): {
   };
 }
 
+/**
+ * 生成核心系统提示词
+ *
+ * 此函数是系统提示词生成的核心，负责：
+ * 1. 处理自定义系统提示词文件（通过 GEMINI_SYSTEM_MD 环境变量）
+ * 2. 根据配置动态生成提示词内容（如是否启用 CodebaseInvestigatorAgent）
+ * 3. 检测运行环境（沙箱、Git 仓库等）并调整提示词
+ * 4. 附加用户记忆（userMemory）到提示词末尾
+ *
+ * 系统提示词定义了 AI Agent 的核心行为规范，包括：
+ * - 核心要求（Core Mandates）：约定遵循、库验证、风格一致性等
+ * - 主要工作流（Primary Workflows）：软件工程任务、新应用开发
+ * - 操作指南（Operational Guidelines）：语气风格、安全规则、工具使用
+ * - 示例（Examples）：展示正确的交互方式
+ *
+ * @param config - 应用配置对象，用于获取工具注册表和其他配置信息
+ * @param userMemory - 用户记忆内容（可选），会附加到提示词末尾
+ * @returns 完整的系统提示词字符串
+ *
+ * @example
+ * ```typescript
+ * const config = await loadConfig();
+ * const systemPrompt = getCoreSystemPrompt(config, "User prefers TypeScript");
+ * // systemPrompt 将包含完整的系统提示词 + 用户记忆
+ * ```
+ *
+ * 环境变量：
+ * - GEMINI_SYSTEM_MD: 自定义系统提示词文件路径或开关（'true'/'false'/'1'/'0'）
+ * - GEMINI_WRITE_SYSTEM_MD: 是否将生成的提示词写入文件
+ * - SANDBOX: 沙箱环境标识
+ */
 export function getCoreSystemPrompt(
   config: Config,
   userMemory?: string,
 ): string {
-  // A flag to indicate whether the system prompt override is active.
+  // ========== 阶段 1：处理自定义系统提示词文件覆盖 ==========
+  // 标志位：指示是否启用了系统提示词覆盖
   let systemMdEnabled = false;
-  // The default path for the system prompt file. This can be overridden.
+  // 默认路径：系统提示词文件的默认位置（可以被环境变量覆盖）
+  // 通常位于 ~/.gemini/system.md
   let systemMdPath = path.resolve(path.join(GEMINI_CONFIG_DIR, 'system.md'));
-  // Resolve the environment variable to get either a path or a switch value.
+
+  // 解析 GEMINI_SYSTEM_MD 环境变量，获取路径或开关值
+  // 支持三种形式：
+  // 1. 未设置或空 → 使用默认提示词
+  // 2. 'true'/'1' → 使用默认路径的自定义文件
+  // 3. 文件路径 → 使用指定路径的自定义文件
   const systemMdResolution = resolvePathFromEnv(
     process.env['GEMINI_SYSTEM_MD'],
   );
 
-  // Proceed only if the environment variable is set and is not disabled.
+  // 仅在环境变量已设置且未被禁用时继续处理
   if (systemMdResolution.value && !systemMdResolution.isDisabled) {
     systemMdEnabled = true;
 
-    // We update systemMdPath to this new custom path.
+    // 如果不是简单的开关（true/false），则更新为自定义路径
     if (!systemMdResolution.isSwitch) {
       systemMdPath = systemMdResolution.value;
     }
 
-    // require file to exist when override is enabled
+    // 当覆盖启用时，要求文件必须存在
+    // 这是为了避免用户误配置导致静默失败
     if (!fs.existsSync(systemMdPath)) {
       throw new Error(`missing system prompt file '${systemMdPath}'`);
     }
   }
 
+  // ========== 阶段 2：检测是否启用 CodebaseInvestigatorAgent ==========
+  // CodebaseInvestigatorAgent 是一个智能代码库分析代理
+  // 如果启用，将调整工作流程以优先使用该代理进行代码探索
   const enableCodebaseInvestigator = config
     .getToolRegistry()
     .getAllToolNames()
     .includes(CodebaseInvestigatorAgent.name);
 
+  // ========== 阶段 3：生成或读取基础提示词 ==========
+  // 如果启用了自定义提示词文件，从文件读取；否则使用内置的默认提示词
+  // 默认提示词是一个详细的多部分文档，定义了 AI Agent 的完整行为规范
   const basePrompt = systemMdEnabled
     ? fs.readFileSync(systemMdPath, 'utf8')
     : `You are an interactive CLI agent specializing in software engineering tasks. Your primary goal is to help users safely and efficiently, adhering strictly to the following instructions and utilizing your available tools.
@@ -126,16 +218,24 @@ export function getCoreSystemPrompt(
 
 ## Software Engineering Tasks
 When requested to perform tasks like fixing bugs, adding features, refactoring, or explaining code, follow this sequence:
-${(function () {
-  if (enableCodebaseInvestigator) {
-    return `
+${
+  // ===== 动态生成：根据是否启用 CodebaseInvestigatorAgent 选择不同的工作流 =====
+  // 此 IIFE（立即执行函数表达式）根据配置生成适当的"理解"和"计划"步骤
+  // - 如果启用了 CodebaseInvestigatorAgent：优先使用智能代理进行代码探索
+  // - 否则：使用传统的 grep/glob/read 工具进行搜索
+  (function () {
+    if (enableCodebaseInvestigator) {
+      // 变体 A：启用智能代理的工作流
+      return `
 1. **Understand & Strategize:** for any request that requires searching terms or explore the codebase, your **first and primary tool** must be '${CodebaseInvestigatorAgent.name}'. You must use it to build a comprehensive understanding of the relevant code, its structure, and dependencies. The output from '${CodebaseInvestigatorAgent.name}' will be the foundation of your plan. YOU MUST not use '${GrepTool.Name}' or '${GlobTool.Name}' as your initial exploration tool; they should only be used for secondary, targeted searches after the investigator has provided you with context.
 2. **Plan:** Build a coherent and grounded (based on the understanding in step 1) plan for how you intend to resolve the user's task. Do not ignore the output of '${CodebaseInvestigatorAgent.name}', you must use it as the foundation of your plan. Share an extremely concise yet clear plan with the user if it would help the user understand your thought process. As part of the plan, you should use an iterative development process that includes writing unit tests to verify your changes. Use output logs or debug statements as part of this process to arrive at a solution.`;
-  }
-  return `
+    }
+    // 变体 B：使用传统工具的工作流
+    return `
 1. **Understand:** Think about the user's request and the relevant codebase context. Use '${GrepTool.Name}' and '${GlobTool.Name}' search tools extensively (in parallel if independent) to understand file structures, existing code patterns, and conventions. Use '${ReadFileTool.Name}' and '${ReadManyFilesTool.Name}' to understand context and validate any assumptions you may have.
 2. **Plan:** Build a coherent and grounded (based on the understanding in step 1) plan for how you intend to resolve the user's task. Share an extremely concise yet clear plan with the user if it would help the user understand your thought process. As part of the plan, you should use an iterative development process that includes writing unit tests to verify your changes. Use output logs or debug statements as part of this process to arrive at a solution.`;
-})()}
+  })()
+}
 3. **Implement:** Use the available tools (e.g., '${EditTool.Name}', '${WRITE_FILE_TOOL_NAME}' '${ShellTool.Name}' ...) to act on the plan, strictly adhering to the project's established conventions (detailed under 'Core Mandates').
 4. **Verify (Tests):** If applicable and feasible, verify the changes using the project's testing procedures. Identify the correct test commands and frameworks by examining 'README' files, build/package configuration (e.g., 'package.json'), or existing test execution patterns. NEVER assume standard test commands.
 5. **Verify (Standards):** VERY IMPORTANT: After making code changes, execute the project-specific build, linting and type-checking commands (e.g., 'tsc', 'npm run lint', 'ruff check .') that you have identified for this project (or obtained from the user). This ensures code quality and adherence to standards. If unsure about these commands, you can ask the user if they'd like you to run them and if so how to.
@@ -188,75 +288,116 @@ ${(function () {
 - **Help Command:** The user can use '/help' to display help information.
 - **Feedback:** To report a bug or provide feedback, please use the /bug command.
 
-${(function () {
-  // Determine sandbox status based on environment variables
-  const isSandboxExec = process.env['SANDBOX'] === 'sandbox-exec';
-  const isGenericSandbox = !!process.env['SANDBOX']; // Check if SANDBOX is set to any non-empty value
+${
+  // ===== 动态生成：根据沙箱环境添加相应的提示 =====
+  // 此 IIFE 检测当前运行环境，并生成适当的沙箱相关说明
+  // 三种可能的环境：
+  // 1. macOS Seatbelt（Apple 的沙箱机制）
+  // 2. 通用沙箱容器
+  // 3. 无沙箱（直接在用户系统运行）
+  (function () {
+    // 检测沙箱状态（基于环境变量）
+    const isSandboxExec = process.env['SANDBOX'] === 'sandbox-exec';
+    const isGenericSandbox = !!process.env['SANDBOX']; // 检查 SANDBOX 是否设置为任何非空值
 
-  if (isSandboxExec) {
-    return `
+    if (isSandboxExec) {
+      // 场景 1：macOS Seatbelt 环境
+      return `
 # macOS Seatbelt
 You are running under macos seatbelt with limited access to files outside the project directory or system temp directory, and with limited access to host system resources such as ports. If you encounter failures that could be due to macOS Seatbelt (e.g. if a command fails with 'Operation not permitted' or similar error), as you report the error to the user, also explain why you think it could be due to macOS Seatbelt, and how the user may need to adjust their Seatbelt profile.
 `;
-  } else if (isGenericSandbox) {
-    return `
+    } else if (isGenericSandbox) {
+      // 场景 2：通用沙箱环境
+      return `
 # Sandbox
 You are running in a sandbox container with limited access to files outside the project directory or system temp directory, and with limited access to host system resources such as ports. If you encounter failures that could be due to sandboxing (e.g. if a command fails with 'Operation not permitted' or similar error), when you report the error to the user, also explain why you think it could be due to sandboxing, and how the user may need to adjust their sandbox configuration.
 `;
-  } else {
-    return `
+    } else {
+      // 场景 3：无沙箱环境（需要提醒用户注意安全）
+      return `
 # Outside of Sandbox
 You are running outside of a sandbox container, directly on the user's system. For critical commands that are particularly likely to modify the user's system outside of the project directory or system temp directory, as you explain the command to the user (per the Explain Critical Commands rule above), also remind the user to consider enabling sandboxing.
 `;
-  }
-})()}
+    }
+  })()
+}
 
-${(function () {
-  if (isGitRepository(process.cwd())) {
-    return `
+${
+  // ===== 动态生成：如果当前目录是 Git 仓库，添加 Git 操作指南 =====
+  // 此 IIFE 检测当前工作目录是否为 Git 仓库
+  // 如果是，则添加详细的 Git 操作规范和提交流程说明
+  (function () {
+    if (isGitRepository(process.cwd())) {
+      // 当前目录是 Git 仓库，添加 Git 相关指南
+      return `
 # Git Repository
 - The current working (project) directory is being managed by a git repository.
+  （当前工作（项目）目录由 git 仓库管理。）
 - When asked to commit changes or prepare a commit, always start by gathering information using shell commands:
+  （当被要求提交变更或准备提交时，始终先使用 shell 命令收集信息：）
   - \`git status\` to ensure that all relevant files are tracked and staged, using \`git add ...\` as needed.
+    （\`git status\` 确保所有相关文件都被跟踪和暂存，根据需要使用 \`git add ...\`。）
   - \`git diff HEAD\` to review all changes (including unstaged changes) to tracked files in work tree since last commit.
+    （\`git diff HEAD\` 审查自上次提交以来工作树中已跟踪文件的所有变更（包括未暂存的变更）。）
     - \`git diff --staged\` to review only staged changes when a partial commit makes sense or was requested by the user.
+      （\`git diff --staged\` 当部分提交有意义或用户请求时，仅审查已暂存的变更。）
   - \`git log -n 3\` to review recent commit messages and match their style (verbosity, formatting, signature line, etc.)
+    （\`git log -n 3\` 审查最近的提交消息并匹配其风格（详细程度、格式、签名行等）。）
 - Combine shell commands whenever possible to save time/steps, e.g. \`git status && git diff HEAD && git log -n 3\`.
+  （尽可能组合 shell 命令以节省时间/步骤，例如 \`git status && git diff HEAD && git log -n 3\`。）
 - Always propose a draft commit message. Never just ask the user to give you the full commit message.
+  （始终提议一个草稿提交消息。绝不只是要求用户给你完整的提交消息。）
 - Prefer commit messages that are clear, concise, and focused more on "why" and less on "what".
+  （优先使用清晰、简洁、更关注"为什么"而不是"什么"的提交消息。）
 - Keep the user informed and ask for clarification or confirmation where needed.
+  （让用户保持知情，并在需要时请求澄清或确认。）
 - After each commit, confirm that it was successful by running \`git status\`.
+  （每次提交后，通过运行 \`git status\` 确认提交成功。）
 - If a commit fails, never attempt to work around the issues without being asked to do so.
+  （如果提交失败，绝不在未被要求的情况下尝试绕过问题。）
 - Never push changes to a remote repository without being asked explicitly by the user.
+  （绝不在未被用户明确要求的情况下推送变更到远程仓库。）
 `;
-  }
-  return '';
-})()}
+    }
+    // 不是 Git 仓库，不添加任何内容
+    return '';
+  })()
+}
 
 # Examples (Illustrating Tone and Workflow)
+（示例：演示语气和工作流）
+
 <example>
 user: 1 + 2
 model: 3
+<!-- 极简风格：直接回答，无需解释 -->
 </example>
 
 <example>
 user: is 13 a prime number?
 model: true
+<!-- 简洁回答：布尔判断直接给出结果 -->
 </example>
 
 <example>
 user: list files here.
 model: [tool_call: ${LSTool.Name} for path '/path/to/project']
+<!-- 工具调用：使用适当的工具完成任务 -->
 </example>
 
 <example>
 user: start the server implemented in server.js
 model: [tool_call: ${ShellTool.Name} for 'node server.js &' because it must run in the background]
+<!-- 后台进程：长期运行的服务需使用 & 在后台运行 -->
 </example>
 
-${(function () {
-  if (enableCodebaseInvestigator) {
-    return `
+${
+  // ===== 动态生成：根据是否启用 CodebaseInvestigatorAgent 生成不同的示例 =====
+  // 提供适合当前配置的代码重构示例
+  (function () {
+    if (enableCodebaseInvestigator) {
+      // 变体 A：使用智能代理的重构示例
+      return `
 <example>
 user: Refactor the auth logic in src/auth.py to use the requests library instead of urllib.
 model: Okay, I can refactor 'src/auth.py'.
@@ -391,90 +532,168 @@ To help you check their settings, I can read their contents. Which one would you
 # Final Reminder
 Your core function is efficient and safe assistance. Balance extreme conciseness with the crucial need for clarity, especially regarding safety and potential system modifications. Always prioritize user control and project conventions. Never make assumptions about the contents of files; instead use '${ReadFileTool.Name}' or '${ReadManyFilesTool.Name}' to ensure you aren't making broad assumptions. Finally, you are an agent - please keep going until the user's query is completely resolved.
 `.trim();
+  // 提示词字符串到此结束
+  // 使用 .trim() 移除首尾空白，确保提示词格式整洁
 
-  // if GEMINI_WRITE_SYSTEM_MD is set (and not 0|false), write base system prompt to file
+  // ========== 阶段 4：可选功能 - 将生成的提示词写入文件 ==========
+  // 如果设置了 GEMINI_WRITE_SYSTEM_MD 环境变量（且未禁用），
+  // 则将生成的提示词保存到文件中，方便用户查看和调试
   const writeSystemMdResolution = resolvePathFromEnv(
     process.env['GEMINI_WRITE_SYSTEM_MD'],
   );
 
-  // Check if the feature is enabled. This proceeds only if the environment
-  // variable is set and is not explicitly '0' or 'false'.
+  // 检查功能是否启用：仅在环境变量已设置且不是 '0' 或 'false' 时执行
   if (writeSystemMdResolution.value && !writeSystemMdResolution.isDisabled) {
+    // 确定写入路径：
+    // - 如果是开关（true/1），使用默认路径 systemMdPath
+    // - 否则使用指定的自定义路径
     const writePath = writeSystemMdResolution.isSwitch
       ? systemMdPath
       : writeSystemMdResolution.value;
 
+    // 确保目标目录存在（递归创建）
     fs.mkdirSync(path.dirname(writePath), { recursive: true });
+    // 写入提示词内容到文件
     fs.writeFileSync(writePath, basePrompt);
   }
 
+  // ========== 阶段 5：附加用户记忆到提示词末尾 ==========
+  // 用户记忆（userMemory）包含 AI Agent 需要记住的用户特定信息
+  // 例如：偏好的编码风格、常用项目路径、个人工具别名等
+  // 格式：在主提示词后添加分隔线（---）和记忆内容
   const memorySuffix =
     userMemory && userMemory.trim().length > 0
       ? `\n\n---\n\n${userMemory.trim()}`
       : '';
 
+  // ========== 阶段 6：返回完整的系统提示词 ==========
+  // 组合基础提示词和用户记忆后缀
   return `${basePrompt}${memorySuffix}`;
 }
 
 /**
- * Provides the system prompt for the history compression process.
- * This prompt instructs the model to act as a specialized state manager,
- * think in a scratchpad, and produce a structured XML summary.
+ * 生成对话历史压缩提示词
+ *
+ * 此函数提供用于对话历史压缩的系统提示词。当对话历史变得过长时，
+ * 此提示词指导 AI 模型将整个历史压缩为结构化的 XML 快照。
+ *
+ * 压缩机制的工作原理：
+ * 1. 对话历史增长到一定长度后，触发压缩流程
+ * 2. AI 模型使用此提示词，将历史转换为结构化快照
+ * 3. 压缩后的快照成为 AI Agent 对过去的"唯一记忆"
+ * 4. Agent 基于快照恢复工作，而不是原始历史
+ *
+ * 快照结构包含：
+ * - overall_goal: 用户的总体目标（单句描述）
+ * - key_knowledge: 关键事实、约定和约束（项目符号列表）
+ * - file_system_state: 文件操作记录（创建、读取、修改、删除）
+ * - recent_actions: 最近的重要操作及其结果
+ * - current_plan: 分步计划（标记已完成、进行中、待办）
+ *
+ * 此压缩机制的重要性：
+ * - 解决上下文长度限制问题
+ * - 保留关键信息，丢弃冗余对话
+ * - 使 Agent 能够在长会话中保持连贯性
+ *
+ * @returns 对话历史压缩的系统提示词字符串
+ *
+ * @example
+ * ```typescript
+ * const compressionPrompt = getCompressionPrompt();
+ * // 当需要压缩历史时，使用此提示词引导模型
+ * const snapshot = await model.generate(compressionPrompt + conversationHistory);
+ * ```
  */
 export function getCompressionPrompt(): string {
   return `
 You are the component that summarizes internal chat history into a given structure.
+（你是将内部聊天历史摘要为给定结构的组件。）
 
 When the conversation history grows too large, you will be invoked to distill the entire history into a concise, structured XML snapshot. This snapshot is CRITICAL, as it will become the agent's *only* memory of the past. The agent will resume its work based solely on this snapshot. All crucial details, plans, errors, and user directives MUST be preserved.
+（当对话历史变得过大时，你将被调用以将整个历史提炼为简洁、结构化的 XML 快照。
+此快照至关重要，因为它将成为代理对过去的 *唯一* 记忆。代理将仅基于此快照恢复其工作。
+所有关键细节、计划、错误和用户指令 **必须** 被保留。）
 
 First, you will think through the entire history in a private <scratchpad>. Review the user's overall goal, the agent's actions, tool outputs, file modifications, and any unresolved questions. Identify every piece of information that is essential for future actions.
+（首先，你将在私有的 <scratchpad> 中思考整个历史。审查用户的总体目标、代理的操作、
+工具输出、文件修改以及任何未解决的问题。识别对未来操作至关重要的每一条信息。）
 
 After your reasoning is complete, generate the final <state_snapshot> XML object. Be incredibly dense with information. Omit any irrelevant conversational filler.
+（在你的推理完成后，生成最终的 <state_snapshot> XML 对象。信息密度要极高。
+省略任何无关的对话填充词。）
 
 The structure MUST be as follows:
+（结构 **必须** 如下：）
 
 <state_snapshot>
     <overall_goal>
         <!-- A single, concise sentence describing the user's high-level objective. -->
+        <!-- （描述用户高层目标的单一、简洁句子。） -->
         <!-- Example: "Refactor the authentication service to use a new JWT library." -->
+        <!-- （示例："重构认证服务以使用新的 JWT 库。"） -->
     </overall_goal>
 
     <key_knowledge>
         <!-- Crucial facts, conventions, and constraints the agent must remember based on the conversation history and interaction with the user. Use bullet points. -->
-        <!-- Example:
+        <!-- （代理必须记住的关键事实、约定和约束，基于对话历史和与用户的互动。使用项目符号。） -->
+        <!-- Example: -->
+        <!-- （示例：） -->
+        <!--
          - Build Command: \`npm run build\`
+           （构建命令：\`npm run build\`）
          - Testing: Tests are run with \`npm test\`. Test files must end in \`.test.ts\`.
+           （测试：使用 \`npm test\` 运行测试。测试文件必须以 \`.test.ts\` 结尾。）
          - API Endpoint: The primary API endpoint is \`https://api.example.com/v2\`.
-         
+           （API 端点：主要 API 端点是 \`https://api.example.com/v2\`。）
         -->
     </key_knowledge>
 
     <file_system_state>
         <!-- List files that have been created, read, modified, or deleted. Note their status and critical learnings. -->
-        <!-- Example:
+        <!-- （列出已创建、读取、修改或删除的文件。注明其状态和关键学习。） -->
+        <!-- Example: -->
+        <!-- （示例：） -->
+        <!--
          - CWD: \`/home/user/project/src\`
+           （当前工作目录：\`/home/user/project/src\`）
          - READ: \`package.json\` - Confirmed 'axios' is a dependency.
+           （已读取：\`package.json\` - 确认 'axios' 是依赖项。）
          - MODIFIED: \`services/auth.ts\` - Replaced 'jsonwebtoken' with 'jose'.
+           （已修改：\`services/auth.ts\` - 将 'jsonwebtoken' 替换为 'jose'。）
          - CREATED: \`tests/new-feature.test.ts\` - Initial test structure for the new feature.
+           （已创建：\`tests/new-feature.test.ts\` - 新功能的初始测试结构。）
         -->
     </file_system_state>
 
     <recent_actions>
         <!-- A summary of the last few significant agent actions and their outcomes. Focus on facts. -->
-        <!-- Example:
+        <!-- （最近几次重要代理操作及其结果的摘要。关注事实。） -->
+        <!-- Example: -->
+        <!-- （示例：） -->
+        <!--
          - Ran \`grep 'old_function'\` which returned 3 results in 2 files.
+           （运行 \`grep 'old_function'\`，在 2 个文件中返回 3 个结果。）
          - Ran \`npm run test\`, which failed due to a snapshot mismatch in \`UserProfile.test.ts\`.
+           （运行 \`npm run test\`，由于 \`UserProfile.test.ts\` 中的快照不匹配而失败。）
          - Ran \`ls -F static/\` and discovered image assets are stored as \`.webp\`.
+           （运行 \`ls -F static/\`，发现图像资源存储为 \`.webp\` 格式。）
         -->
     </recent_actions>
 
     <current_plan>
         <!-- The agent's step-by-step plan. Mark completed steps. -->
-        <!-- Example:
+        <!-- （代理的分步计划。标记已完成的步骤。） -->
+        <!-- Example: -->
+        <!-- （示例：） -->
+        <!--
          1. [DONE] Identify all files using the deprecated 'UserAPI'.
+            （[已完成] 识别所有使用废弃的 'UserAPI' 的文件。）
          2. [IN PROGRESS] Refactor \`src/components/UserProfile.tsx\` to use the new 'ProfileAPI'.
+            （[进行中] 重构 \`src/components/UserProfile.tsx\` 以使用新的 'ProfileAPI'。）
          3. [TODO] Refactor the remaining files.
+            （[待办] 重构剩余文件。）
          4. [TODO] Update tests to reflect the API change.
+            （[待办] 更新测试以反映 API 变更。）
         -->
     </current_plan>
 </state_snapshot>

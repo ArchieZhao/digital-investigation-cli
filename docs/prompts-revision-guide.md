@@ -4,6 +4,47 @@
 
 ---
 
+## 📚 相关文档
+
+- **[prompts-detailed-analysis-and-revision.md](./prompts-detailed-analysis-and-revision.md)** - 完整的分析报告，包含详细的差距分析、修订方案和实施指南（推荐先阅读）
+- **[prompts-analysis-cn.md](./prompts-analysis-cn.md)** - 现有 prompts.ts 的逐句翻译和分析
+- **[AGENT.md](../AGENT.md)** - AI Agent 详细工作手册
+- **[CLAUDE.md](../CLAUDE.md)** - Claude Code 工作手册
+
+---
+
+## 🚀 快速开始
+
+### 文档使用指南
+
+**如果你是 AI Agent（Claude Code / ChatGPT Codex）**：
+1. 先阅读 **[prompts-detailed-analysis-and-revision.md](./prompts-detailed-analysis-and-revision.md)** - 了解完整的修订方案、差距分析和实施步骤
+2. 再阅读本文档 - 获取详细的修订指导和最佳实践
+3. 参考 **[AGENT.md](../AGENT.md)** 和 **[CLAUDE.md](../CLAUDE.md)** - 了解项目上下文和工作规范
+
+**如果你是开发者**：
+1. **执行摘要**：阅读 [prompts-detailed-analysis-and-revision.md#执行摘要](./prompts-detailed-analysis-and-revision.md#执行摘要) - 快速了解修订要点
+2. **差距分析**：查看 [差距分析](./prompts-detailed-analysis-and-revision.md#差距分析) - 理解为什么需要修订
+3. **修订方案**：按照 [修订方案](./prompts-detailed-analysis-and-revision.md#修订方案) 和本文档的 [完整修订方案](#完整修订方案) 进行修改
+4. **实施指南**：遵循 [实施指南](./prompts-detailed-analysis-and-revision.md#实施指南) 进行测试和验证
+
+### 核心修订原则（必读）
+
+**🎯 目标**：将通用软件工程 AI Agent → 数字调查专家 AI Agent
+
+**🔑 关键差异**：
+
+| 维度 | 当前（软件工程） | 目标（数字调查） |
+|------|-----------------|----------------|
+| **优先级** | 代码质量、测试覆盖 | 快速找到答案、完成任务 |
+| **方法论** | 单线程、步骤严格 | 并行搜索、快速切换 |
+| **工具链** | npm/git/lint/test | grep/docker/mysql/hashcat/jadx |
+| **示例** | 重构代码、编写测试 | 找密码、提取数据、分析容器 |
+
+**⚡ 核心原则**：**快速响应 + 灵活变通 + 实战导向** = 以完成调查分析为王
+
+---
+
 ## 目录
 
 - [项目定位与修订目标](#项目定位与修订目标)
@@ -1368,6 +1409,69 @@ the user's investigation goals. Remember: **快速找到答案，完成调查任
 
 ---
 
+## 📋 修订检查清单
+
+在完成修订后，请使用以下清单验证：
+
+### 核心内容检查
+
+- [ ] **角色定位**：开头明确说明"digital forensics and investigation tasks"
+- [ ] **核心原则**：包含"🎯 以完成调查分析为王"和三个职责（快速响应、灵活变通、实战导向）
+- [ ] **调查方法论**：替代了"代码约定"，强调任务识别和并行搜索
+- [ ] **证据完整性**：替代了"库验证"，说明取证规范（但不过度要求）
+- [ ] **多路径策略**：新增章节，强调并行尝试 3-5 种方法，单个不超过 15 分钟
+- [ ] **实战优先**：替代了"主动测试"，强调快速得到结果
+- [ ] **时间管理**：新增章节，强调效率和优先级
+
+### 工作流检查
+
+- [ ] **工作流 1**：数字取证分析任务（识别 → 并行搜索 → 验证 → 分析 → 整理 → 遇阻处理）
+- [ ] **工作流 2**：密码破解与绕密任务
+- [ ] **工作流 3**：容器和虚拟化分析
+- [ ] **工作流 4**：数据库分析与统计
+- [ ] **移除**：原有的"Software Engineering Tasks"和"New Applications"工作流
+
+### 工具使用检查
+
+- [ ] **保留**：绝对路径要求、并行执行、后台进程、用户确认
+- [ ] **新增**：取证专用工具策略（搜索定位、数据库操作、容器分析等）
+- [ ] **新增**：工具组合链示例
+- [ ] **新增**：避免的陷阱说明
+
+### 示例检查
+
+- [ ] **保留**：基础交互示例（1+2、list files）
+- [ ] **新增**：查找网站数据库密码示例
+- [ ] **新增**：iOS 备份聊天记录提取示例
+- [ ] **新增**：密码爆破与绕密示例
+- [ ] **新增**：Docker 容器分析示例
+- [ ] **新增**：数据库统计示例
+- [ ] **新增**：遇阻快速切换示例
+- [ ] **移除**：代码重构、编写测试等编程示例
+
+### 新增章节检查
+
+- [ ] **数字取证方法论**：标准流程、关键原则、适用场景
+- [ ] **任务类型快速参考**：识别表、决策树、示例
+- [ ] **常见陷阱与解决方案**：至少 5 个陷阱及解决方法
+
+### 技术细节检查
+
+- [ ] **动态生成机制**：CodebaseInvestigatorAgent、沙箱环境、Git 仓库检测保持不变
+- [ ] **用户记忆**：memorySuffix 机制保持不变
+- [ ] **文件写入**：GEMINI_WRITE_SYSTEM_MD 机制保持不变
+- [ ] **语法正确**：TypeScript 模板字符串语法正确，无未闭合的引号或括号
+
+### 测试验证检查
+
+- [ ] **单元测试**：`npm test` 通过
+- [ ] **构建测试**：`npm run build` 成功
+- [ ] **CLI 启动**：`npm start` 能正常启动
+- [ ] **手动测试**：至少测试 3 个取证场景，AI 响应符合预期
+- [ ] **向后兼容**：通用编程任务（如"fix this bug"）仍能正常处理
+
+---
+
 ## 实施建议
 
 ### 实施步骤
@@ -1519,6 +1623,232 @@ the user's investigation goals. Remember: **快速找到答案，完成调查任
 3. 并行尝试多种方法，快速找到答案
 4. 遵循取证规范和伦理准则
 5. 提供清晰、结构化的调查结果
+
+---
+
+## ❓ 常见问题
+
+### Q1: 修订后的提示词是否还能处理通用编程任务？
+
+**A**: 可以。我们在提示词中保留了兼容性说明：
+
+```markdown
+# 兼容性说明
+
+While your primary expertise is digital forensics and investigation, you also retain general programming and CLI agent capabilities. When the user's request is clearly about software development (e.g., "write a function", "fix this bug", "add tests"), you should apply standard software engineering practices. However, for forensic and investigation tasks, prioritize the workflows and principles described above.
+```
+
+如果用户明确要求编程任务（如"重构这个函数"、"编写测试"），AI 仍会应用软件工程实践。
+
+---
+
+### Q2: 为什么强调"不要过度关注代码规范"？
+
+**A**: 数字调查的核心目标是**快速找到答案**，而不是编写高质量代码。在调查场景中：
+
+- ✅ **优先**：快速编写脚本提取数据，即使代码不规范
+- ✅ **优先**：并行尝试多种方法，而不是完美实现单一方法
+- ❌ **避免**：花费时间格式化代码、添加类型注解、编写测试（除非任务要求）
+
+记住：**快速脚本 > 完美代码**，调查完成后通常不需要维护这些脚本。
+
+---
+
+### Q3: 如何处理"证据完整性"与"实战优先"的冲突？
+
+**A**: 在提示词中采用**平衡策略**：
+
+- **理想情况**：记录哈希、只读挂载、在副本上操作
+- **时间紧迫**：可以直接操作，但记录关键步骤
+- **权衡原则**：效率优先，但关键操作（如修改数据库）要明确告知用户
+
+示例：
+```
+找到密码后，优先验证是否正确（实战）
+如果需要修改数据库绕密，先告知用户风险（证据完整性）
+```
+
+---
+
+### Q4: 如何测试修订后的提示词？
+
+**A**: 分为三个层次：
+
+**1. 技术测试**（必须）：
+```bash
+npm test           # 单元测试
+npm run build      # 构建测试
+npm start          # CLI 启动测试
+```
+
+**2. 场景测试**（推荐）：
+- "这是一台运行宝塔面板的 Linux 服务器，找到 MySQL 密码"
+- "分析这个 iOS 备份，提取 WhatsApp 聊天记录"
+- "这个 Docker 容器中有什么环境变量？"
+
+观察 AI 是否：
+- 并行尝试多种方法
+- 快速给出结果
+- 不纠结代码规范
+
+**3. 兼容性测试**（可选）：
+- "重构这个函数，使用更现代的语法"
+- "为这个模块编写单元测试"
+
+观察 AI 是否仍能正常处理编程任务。
+
+---
+
+### Q5: 修订过程中遇到 TypeScript 语法错误怎么办？
+
+**A**: 常见问题和解决方案：
+
+**问题 1：模板字符串未闭合**
+```typescript
+// ❌ 错误
+const prompt = `
+# Title
+...
+`; // 缺少闭合
+
+// ✅ 正确
+const prompt = `
+# Title
+...
+`.trim();
+```
+
+**问题 2：嵌套引号冲突**
+```typescript
+// ❌ 错误
+const prompt = `Use '${tool.Name}' to find "password"`;
+
+// ✅ 正确
+const prompt = `Use '${tool.Name}' to find \"password\"`;
+// 或
+const prompt = `Use '${tool.Name}' to find password`;
+```
+
+**问题 3：特殊字符未转义**
+```bash
+# ❌ 在 Markdown 代码块中
+\`\`\`bash
+grep -r "password" .
+\`\`\`
+
+# ✅ 正确（在 TypeScript 字符串中）
+\\`\\`\\`bash
+grep -r "password" .
+\\`\\`\\`
+```
+
+**调试技巧**：
+```bash
+# 运行类型检查快速定位错误
+npm run typecheck
+
+# 查看详细错误信息
+npx tsc --noEmit
+```
+
+---
+
+### Q6: 如何处理不同语言的提示词？
+
+**A**: 当前策略：
+
+- **主要语言**：英文（保持与原有提示词一致）
+- **中文标注**：关键章节标题和说明使用中文标注（如"核心要求 (Core Mandates)"）
+- **示例对话**：使用中文示例（用户和 AI 的对话）
+
+原因：
+- 英文提示词对 LLM 更友好（训练数据主要是英文）
+- 中文标注帮助中文用户理解
+- 中文示例展示实际使用场景
+
+---
+
+### Q7: 如何逐步迁移，避免一次性大改动？
+
+**A**: 推荐渐进式迁移：
+
+**阶段 1**（风险最低）：
+- 只修改核心要求（Core Mandates）
+- 添加一个简单的取证工作流
+- 添加 1-2 个取证示例
+- 测试验证基本功能
+
+**阶段 2**（核心功能）：
+- 添加完整的 4 个工作流
+- 替换所有示例
+- 添加工具使用策略
+
+**阶段 3**（完善）：
+- 添加数字取证方法论
+- 添加任务类型识别
+- 添加常见陷阱
+
+**阶段 4**（优化）：
+- 根据实际使用反馈调整
+- 添加更多示例
+- 优化提示词措辞
+
+每个阶段都进行测试验证，确保功能正常后再进入下一阶段。
+
+---
+
+### Q8: 如何收集用户反馈并迭代优化？
+
+**A**: 建议的反馈机制：
+
+**1. 日志记录**：
+```typescript
+// 在 getCoreSystemPrompt 中添加
+if (process.env['DEBUG_PROMPTS']) {
+  console.log('[Prompts] Generated system prompt length:', basePrompt.length);
+  console.log('[Prompts] User memory length:', userMemory?.length || 0);
+}
+```
+
+**2. 用户调查**：
+- 创建 Issue 模板收集使用场景
+- 询问哪些任务完成得好/不好
+- 收集 AI 响应的典型案例
+
+**3. A/B 测试**（可选）：
+```typescript
+// 支持两种提示词模式
+const mode = process.env['AGENT_MODE'] || 'forensics';
+if (mode === 'forensics') {
+  basePrompt = getForensicsPrompt();
+} else {
+  basePrompt = getDevelopmentPrompt();
+}
+```
+
+**4. 持续优化**：
+- 每月回顾用户反馈
+- 调整提示词措辞和优先级
+- 添加新的示例场景
+- 更新文档
+
+---
+
+## 📖 参考资料
+
+### 内部文档
+- [prompts-detailed-analysis-and-revision.md](./prompts-detailed-analysis-and-revision.md) - 完整分析报告
+- [prompts-analysis-cn.md](./prompts-analysis-cn.md) - 现有提示词分析
+- [AGENT.md](../AGENT.md) - AI Agent 工作手册
+- [CLAUDE.md](../CLAUDE.md) - Claude Code 工作手册
+
+### 数字取证标准
+- ISO/IEC 27037: 数字证据识别、收集、获取和保存指南
+- NIST SP 800-86: 计算机安全事件处理指南
+
+### LLM 提示词工程
+- [OpenAI Prompt Engineering Guide](https://platform.openai.com/docs/guides/prompt-engineering)
+- [Anthropic Claude Prompt Engineering](https://docs.anthropic.com/claude/docs/prompt-engineering)
 
 ---
 
