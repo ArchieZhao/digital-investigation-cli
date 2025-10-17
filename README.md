@@ -7,6 +7,10 @@
 
 > **Fork 说明**: 本项目基于 [Gemini CLI](https://github.com/google-gemini/gemini-cli) 开发，专注于数字取证和安全调查场景。
 
+## 🎯 核心原则
+
+**快速高效，实战导向** - 本工具致力于帮助调查人员快速找到答案、解决问题、完成调查任务，而不是被繁琐的流程和形式所束缚。
+
 ## 🔍 为什么选择 Digital Investigation CLI？
 
 - **🎯 AI 驱动分析**: 利用 Gemini 2.5 Pro 的 1M token 上下文窗口，快速分析大量日志和取证数据
@@ -15,6 +19,47 @@
 - **🔌 可扩展性**: 通过 MCP (Model Context Protocol) 集成专业取证工具
 - **💻 终端优先**: 为安全分析师和取证专家量身打造
 - **🛡️ 开源透明**: Apache 2.0 许可证，代码完全开放
+
+## 💻 技术栈
+
+- **运行时**: Node.js >= 20
+- **主要语言**: TypeScript
+- **UI 框架**: Ink (React for CLI)
+- **AI 服务**: Google Gemini API / Vertex AI
+- **扩展协议**: MCP (Model Context Protocol)
+- **构建工具**: tsup
+- **测试框架**: Vitest
+- **包管理**: npm workspaces (monorepo)
+
+## 📁 项目结构
+
+```
+digital-investigation-cli/
+├── packages/
+│   ├── cli/              # 主 CLI 应用
+│   ├── gemini-api-client/ # Gemini API 客户端
+│   ├── ink-markdown/     # Markdown 渲染组件
+│   ├── mcp-client/       # MCP 协议客户端
+│   └── ...               # 其他工具包
+├── integration-tests/    # 集成测试
+├── scripts/              # 构建和工具脚本
+├── docs/                 # 用户文档
+│   ├── get-started/      # 快速入门
+│   ├── cli/              # CLI 命令参考
+│   ├── tools/            # 工具和扩展
+│   └── ...
+├── Forensics_Notes/      # 取证知识库（实战案例、WP）
+├── README.md             # 项目说明（本文档）
+├── CLAUDE.md             # AI Agent 工作手册
+├── AGENT.md              # LLM Agent 详细指南
+└── GEMINI.md             # 代码规范和架构
+```
+
+**核心模块说明**：
+- **packages/cli**: 主要的命令行界面，包含用户交互、工具调用、会话管理等核心功能
+- **packages/gemini-api-client**: Gemini API 的客户端封装，处理认证、请求、响应等
+- **packages/mcp-client**: MCP 协议客户端，用于集成外部取证工具
+- **Forensics_Notes/**: 包含大量实战取证案例和技巧，是重要的知识参考库
 
 ## 📦 安装
 
@@ -50,10 +95,11 @@ npm start
 
 ### 🔍 数字取证分析
 
-- **日志分析**: 快速解析和分析系统日志、应用日志、Web 服务器日志
+- **日志分析**: 快速解析和分析系统日志、应用日志、Web 服务器日志，识别异常活动
 - **文件系统取证**: 检查文件元数据、时间线分析、删除文件恢复线索
-- **恶意代码检测**: 利用 AI 识别可疑代码模式和行为特征
-- **多模态分析**: 处理截图、PDF 报告等多种证据格式
+- **恶意代码检测**: 利用 AI 识别可疑代码模式和行为特征（如 webshell、后门）
+- **多模态分析**: 处理截图、PDF 报告、图片 EXIF 等多种证据格式
+- **移动设备取证**: iOS/Android 设备数据提取、聊天记录分析、应用数据解析
 
 ### 🚨 事件响应
 
@@ -62,12 +108,18 @@ npm start
 - **证据链追踪**: 维护完整的调查上下文和证据关联
 - **报告生成**: 自动生成结构化的取证报告
 
-### 🛠️ 取证工具集成
+### 🛠️ 服务器与容器分析
 
-- **内存分析**: 分析内存转储文件，识别恶意进程
-- **网络流量分析**: 解析 PCAP 文件，识别异常网络行为
-- **注册表分析**: Windows 注册表取证和历史追踪
-- **时间线重建**: 基于多源数据重建事件时间线
+- **服务器取证**: 宝塔面板分析、Web 应用配置提取、数据库密码恢复
+- **容器分析**: Docker/Podman 容器检查、环境变量提取、镜像分析
+- **虚拟化环境**: ESXi、VMware 虚拟机分析、NAS 服务器取证
+- **网络配置**: OpenWRT 路由器配置、防火墙规则分析
+
+### 🗄️ 数据库与密码分析
+
+- **数据库取证**: MySQL/MongoDB/SQLite 数据提取、关系追踪、金额统计
+- **密码破解**: Hash 爆破、密码逻辑逆向、加密容器解密
+- **聊天记录**: WhatsApp/微信/Signal 等加密数据库解密与分析
 
 ### 🔌 扩展性
 
@@ -158,12 +210,42 @@ gemini
 > 分析最近 24 小时内的系统日志，识别异常登录尝试和权限提升行为
 ```
 
+#### 服务器配置提取
+
+```bash
+cd /www/
+gemini
+> 查找宝塔面板的数据库配置，提取 MySQL 密码和端口信息
+```
+
+#### Docker 容器分析
+
+```bash
+gemini
+> 列出所有运行中的 Docker 容器，检查环境变量中的敏感信息（如数据库密码）
+```
+
+#### 数据库取证
+
+```bash
+gemini
+> 连接到本地 MySQL 数据库，统计所有用户的充值总额和下级数量
+```
+
 #### 恶意代码检测
 
 ```bash
 cd suspicious-files/
 gemini
 > 检查这些 PHP 文件中是否存在 webshell 或后门代码
+```
+
+#### 移动设备取证
+
+```bash
+cd ios-backup/
+gemini
+> 从 iTunes 备份中提取 WhatsApp 聊天记录和照片 EXIF 信息
 ```
 
 #### 内存取证
@@ -191,14 +273,14 @@ gemini
 
 ## 📚 文档
 
-### 入门指南
+### 🚀 入门指南
 
 - [**快速开始**](./docs/get-started/index.md) - 快速上手
 - [**身份验证配置**](./docs/get-started/authentication.md) - 详细认证配置
 - [**配置指南**](./docs/get-started/configuration.md) - 设置和自定义
 - [**键盘快捷键**](./docs/cli/keyboard-shortcuts.md) - 提高效率
 
-### 取证功能
+### 🔍 取证功能
 
 - [**命令参考**](./docs/cli/commands.md) - 所有斜杠命令（`/help`, `/analyze` 等）
 - [**自定义命令**](./docs/cli/custom-commands.md) - 创建可重用的取证命令
@@ -206,7 +288,7 @@ gemini
 - [**检查点**](./docs/cli/checkpointing.md) - 保存和恢复调查会话
 - [**Token 缓存**](./docs/cli/token-caching.md) - 优化大规模分析的性能
 
-### 取证工具
+### 🛠️ 工具与扩展
 
 - [**内置工具概览**](./docs/tools/index.md)
   - [文件系统操作](./docs/tools/file-system.md) - 文件取证和元数据分析
@@ -215,7 +297,21 @@ gemini
 - [**MCP 服务器集成**](./docs/tools/mcp-server.md) - 集成专业取证工具
 - [**自定义扩展**](./docs/extensions/index.md) - 开发和分享取证模块
 
-### 高级主题
+### 📖 知识库与参考
+
+- **Forensics_Notes/** - 实战取证知识库
+  - `笔记 - Case 调证/` - 案件研判与调证流程
+  - `笔记 - Forensics 服务器/` - 服务器与虚拟化取证
+  - `笔记 - Forensics Windows/` - Windows 系统取证
+  - `笔记 - Forensics MacOS/` - macOS 系统取证
+  - `笔记 - Forensics 移动设备/` - 移动设备取证
+  - `笔记 - Forensics 微信/` - 微信取证
+  - `笔记 - Forensics 流量/` - 网络流量分析
+  - `笔记 - Forensics 介质/` - 存储介质与内存取证
+  - `笔记 - Forensics 数据恢复/` - 数据恢复技术
+  - `WP - 取证比赛WP/` - 历届竞赛题解与实战案例
+
+### ⚙️ 高级主题
 
 - [**无头模式（脚本）**](./docs/cli/headless.md) - 自动化取证工作流
 - [**架构概览**](./docs/architecture.md) - 工具工作原理
@@ -224,7 +320,14 @@ gemini
 - [**企业部署指南**](./docs/cli/enterprise.md) - 企业环境部署
 - [**遥测和监控**](./docs/cli/telemetry.md) - 使用跟踪
 
-### 疑难解答
+### 🔧 开发与贡献
+
+- [**CLAUDE.md**](./CLAUDE.md) - AI Agent 工作手册（为 Claude Code、ChatGPT Codex 等提供项目上下文）
+- [**AGENT.md**](./AGENT.md) - LLM Agent 详细指南（完整的 AI 协作指南）
+- [**GEMINI.md**](./GEMINI.md) - 代码规范和架构细节
+- [**贡献指南**](./CONTRIBUTING.md) - 开发环境设置、编码规范、PR 提交流程
+
+### ❓ 疑难解答
 
 - [**故障排除指南**](./docs/troubleshooting.md) - 常见问题和解决方案
 - [**FAQ**](./docs/faq.md) - 常见问题解答
